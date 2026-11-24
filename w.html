@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b2545">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="תדריך בטיחות">
+<title>תדריך בטיחות — חתימת עובדים</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="styles.css">
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="shared.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="logo"><span class="dot">⛑️</span><span id="tb-title">תדריך בטיחות</span></div>
+  <span class="sp"></span>
+  <button class="tb-btn" id="tb-lang" hidden>🌐</button>
+</header>
+<main id="app"><div class="spinner"></div></main>
+<script src="worker.js"></script>
+</body>
+</html>

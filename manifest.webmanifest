@@ -1,0 +1,15 @@
+{
+  "name": "תדריך בטיחות — חתימת עובדים",
+  "short_name": "תדריך בטיחות",
+  "start_url": "w.html",
+  "scope": "./",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "he",
+  "background_color": "#f5f6f8",
+  "theme_color": "#0b2545",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
