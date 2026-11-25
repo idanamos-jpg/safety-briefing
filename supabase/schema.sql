@@ -168,6 +168,7 @@ grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on public.briefings     to authenticated;
 grant select, insert                 on public.signatures    to authenticated;
 grant select, insert, update, delete on public.custom_topics to authenticated;
+revoke truncate, references, trigger on public.sites, public.briefings, public.signatures, public.custom_topics from anon, authenticated;
 
 -- ---------- פונקציות למנהל ----------
 
