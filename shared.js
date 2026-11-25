@@ -226,3 +226,21 @@ function bindSignForm(root, T) {
     },
   };
 }
+
+/* ---------- רשימת נושאים מאוחדת: מובנים + מהספרייה האישית ---------- */
+const LANG_CODES_TR = ['ar', 'ru', 'ro', 'hi', 'si'];
+function briefingTopicList(b, lang = 'he') {
+  const out = [];
+  (b.topics || []).filter(k => TOPICS.he[k]).forEach(k => {
+    const L = (TOPICS[lang] || TOPICS.he)[k];
+    out.push({ icon: TOPIC_ICONS[k], t: L.t, b: L.b, custom: false });
+  });
+  (b.custom_topics || []).forEach(ct => {
+    if (!ct || !ct.he) return;
+    const tr = ct[lang];
+    const ok = tr && tr.t && Array.isArray(tr.b);
+    const L = ok ? tr : ct.he;
+    out.push({ icon: '📄', t: L.t, b: L.b || [], custom: true, fallback: !ok && lang !== 'he' });
+  });
+  return out;
+}

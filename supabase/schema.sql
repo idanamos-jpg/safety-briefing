@@ -33,6 +33,9 @@ create table if not exists public.briefings (
   email_error       text,
   created_at        timestamptz not null default now()
 );
+-- תדריכים מותאמים שנבחרו — נשמר עותק מלא (כולל תרגומים) ברגע יצירת התדריך, כך שעריכה בספרייה לא משנה תדריכי עבר
+alter table public.briefings add column if not exists custom_topics jsonb not null default '[]'::jsonb;
+
 create index if not exists briefings_owner_date on public.briefings(owner_id, briefing_date desc);
 create index if not exists briefings_site_date  on public.briefings(site_id, briefing_date);
 
@@ -50,6 +53,17 @@ create table if not exists public.signatures (
 -- אותו שם לא יכול לחתום פעמיים על אותו תדריך (ללא תלות ברווחים/אותיות גדולות)
 create unique index if not exists signatures_unique_name
   on public.signatures (briefing_id, lower(regexp_replace(trim(full_name), '\s+', ' ', 'g')));
+
+-- ספריית תדריכים אישית של המנהל (עברית + תרגומים)
+create table if not exists public.custom_topics (
+  id         uuid primary key default gen_random_uuid(),
+  owner_id   uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  title      text not null check (length(trim(title)) between 2 and 200),
+  content    jsonb not null check (content ? 'he' and length(content::text) < 200000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists custom_topics_owner on public.custom_topics(owner_id, title);
 
 -- ---------- טריגרים (הגנות שחלות על כל דרכי החתימה) ----------
 
@@ -70,10 +84,10 @@ begin
 
   if old.status = 'closed' then
     -- אחרי סגירה מותר לעדכן רק את סטטוס המייל
-    if (new.site_id, new.briefing_date, new.briefing_time, new.foreman_name, new.topics, new.notes,
+    if (new.site_id, new.briefing_date, new.briefing_time, new.foreman_name, new.topics, new.custom_topics, new.notes,
         new.recipients, new.status, new.manager_name, new.manager_signature, new.closed_at)
        is distinct from
-       (old.site_id, old.briefing_date, old.briefing_time, old.foreman_name, old.topics, old.notes,
+       (old.site_id, old.briefing_date, old.briefing_time, old.foreman_name, old.topics, old.custom_topics, old.notes,
         old.recipients, old.status, old.manager_name, old.manager_signature, old.closed_at) then
       raise exception 'briefing_closed';
     end if;
@@ -135,6 +149,12 @@ create policy signatures_select on public.signatures for select to authenticated
   using (exists (select 1 from public.briefings b where b.id = briefing_id and b.owner_id = auth.uid()));
 create policy signatures_insert on public.signatures for insert to authenticated
   with check (method = 'manager' and exists (select 1 from public.briefings b where b.id = briefing_id and b.owner_id = auth.uid()));
+
+alter table public.custom_topics enable row level security;
+drop policy if exists custom_topics_all on public.custom_topics;
+create policy custom_topics_all on public.custom_topics for all to authenticated
+  using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+revoke all on public.custom_topics from anon;
 
 -- הרשאות: אנונימיים לא נוגעים בטבלאות בכלל; hash הסיסמה לא נחשף אף פעם
 revoke all on public.sites, public.briefings, public.signatures from anon;
@@ -200,7 +220,8 @@ begin
     'site_name', v_name,
     'briefing', jsonb_build_object(
       'id', b.id, 'date', b.briefing_date, 'time', to_char(b.briefing_time, 'HH24:MI'),
-      'foreman', b.foreman_name, 'topics', to_jsonb(b.topics), 'notes', b.notes, 'status', b.status));
+      'foreman', b.foreman_name, 'topics', to_jsonb(b.topics), 'custom_topics', b.custom_topics,
+      'notes', b.notes, 'status', b.status));
 end $$;
 
 create or replace function public.worker_sign(

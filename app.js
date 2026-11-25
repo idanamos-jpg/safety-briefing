@@ -63,6 +63,10 @@ function route() {
   if (h === '/' || h === '') return renderDashboard();
   if (h === '/new') return renderNew();
   if (h === '/sites') return renderSites();
+  if (h === '/library') return renderLibrary();
+  if (h === '/library/new') return renderTopicEditor(null);
+  const lm = h.match(/^\/library\/([0-9a-f-]{36})$/i);
+  if (lm) return renderTopicEditor(lm[1]);
   const m = h.match(/^\/b\/([0-9a-f-]{36})$/i);
   if (m) return renderBriefing(m[1]);
   location.hash = '#/';
@@ -229,7 +233,14 @@ const TOPIC_POSTER = {
 async function renderNew() {
   loading();
   let sites;
-  try { sites = await loadSites(); } catch (e) { app.innerHTML = `<div class="card alert bad">${esc(errMsg(e))}</div>`; return; }
+  let library = [];
+  try {
+    sites = await loadSites();
+    const { data, error } = await sb.from('custom_topics').select('id,title,content').order('title');
+    if (error) throw error; library = data || [];
+  } catch (e) { app.innerHTML = `<div class="card alert bad">${esc(errMsg(e))}</div>`; return; }
+  let lastTopics = null, lastCustom = [];
+  try { lastTopics = JSON.parse(localStorage.getItem('sb_last_topics') || 'null'); lastCustom = JSON.parse(localStorage.getItem('sb_last_custom') || '[]'); } catch (_) {}
   const lastRecipients = localStorage.getItem('sb_last_recipients') || '';
   const lastForeman = localStorage.getItem('sb_last_foreman') || '';
   const lastSite = localStorage.getItem('sb_last_site_sel') || '';
@@ -252,7 +263,11 @@ async function renderNew() {
       </div>
       <label class="fld"><span>מנהל העבודה המתדרך</span><input id="fm" required value="${esc(lastForeman)}"></label>
       <div class="fld"><span>נושאי בטיחות</span>
-        <div class="topic-pick">${TOPIC_KEYS.map(k => `<label><input type="checkbox" name="tp" value="${k}" checked> ${TOPIC_ICONS[k]} ${esc(TOPICS.he[k].t)}</label>`).join('')}</div>
+        <div class="topic-pick">${TOPIC_KEYS.map(k => `<label><input type="checkbox" name="tp" value="${k}" ${!lastTopics || lastTopics.includes(k) ? 'checked' : ''}> ${TOPIC_ICONS[k]} ${esc(TOPICS.he[k].t)}</label>`).join('')}</div>
+      </div>
+      <div class="fld"><span>📚 תדריכים מהספרייה שלי</span>
+        ${library.length ? `<div class="topic-pick">${library.map(c => `<label><input type="checkbox" name="ct" value="${c.id}" ${lastCustom.includes(c.id) ? 'checked' : ''}> 📄 ${esc(c.title)}${missingLangs(c.content).length ? ' <span class="badge open">חסר תרגום</span>' : ''}</label>`).join('')}</div>` : '<div class="small muted">עוד אין תדריכים בספרייה.</div>'}
+        <a class="btn-link small" href="#/library/new">➕ הוספת תדריך חדש לספרייה</a>
       </div>
       <label class="fld"><span>הערות חופשיות (אופציונלי)</span><textarea id="nt" placeholder="לא מתורגמות — יוצגו לפועלים כפי שנכתבו"></textarea></label>
       <label class="fld"><span>נמעני ה-PDF בסגירה</span><textarea id="rc" dir="ltr" placeholder="safety@company.co.il, pm@company.co.il" style="min-height:60px">${esc(lastRecipients)}</textarea>
@@ -267,7 +282,9 @@ async function renderNew() {
     e.preventDefault();
     const err = m => { $('#be').textContent = m; $('#be').hidden = false; };
     const topics = $$('input[name=tp]:checked').map(i => i.value);
-    if (!topics.length) return err('בחרו לפחות נושא אחד');
+    const customIds = $$('input[name=ct]:checked').map(i => i.value);
+    if (!topics.length && !customIds.length) return err('בחרו לפחות נושא אחד');
+    const custom_topics = customIds.map(id => { const c = library.find(x => x.id === id); return Object.assign({ id }, c.content); });
     const recips = $('#rc').value.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
     const bad = recips.filter(r => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r));
     if (bad.length) return err('כתובת מייל לא תקינה: ' + bad.join(', '));
@@ -283,13 +300,15 @@ async function renderNew() {
     if (!siteId) { $('#bs').disabled = false; return err('בחרו אתר'); }
     const row = {
       site_id: siteId, briefing_date: $('#dt').value, briefing_time: $('#tm').value,
-      foreman_name: $('#fm').value.trim(), topics, notes: $('#nt').value.trim() || null, recipients: recips,
+      foreman_name: $('#fm').value.trim(), topics, custom_topics, notes: $('#nt').value.trim() || null, recipients: recips,
     };
     const { data, error } = await sb.from('briefings').insert(row).select('id').single();
     if (error) { $('#bs').disabled = false; return err(errMsg(error)); }
     localStorage.setItem('sb_last_recipients', recips.join(', '));
     localStorage.setItem('sb_last_foreman', row.foreman_name);
     localStorage.setItem('sb_last_site_sel', siteId);
+    localStorage.setItem('sb_last_topics', JSON.stringify(topics));
+    localStorage.setItem('sb_last_custom', JSON.stringify(customIds));
     location.hash = '#/b/' + data.id;
   };
 }
@@ -299,7 +318,7 @@ const photoCache = {};
 
 async function fetchBriefing(id) {
   const { data, error } = await sb.from('briefings')
-    .select('id,site_id,briefing_date,briefing_time,foreman_name,topics,notes,recipients,status,manager_name,manager_signature,closed_at,email_status,email_error,sites(name)')
+    .select('id,site_id,briefing_date,briefing_time,foreman_name,topics,custom_topics,notes,recipients,status,manager_name,manager_signature,closed_at,email_status,email_error,sites(name)')
     .eq('id', id).single();
   if (error) throw error;
   return data;
@@ -358,7 +377,7 @@ async function renderBriefing(id) {
     ${b.status === 'closed' ? `<div class="card">${emailStatusHTML(b)}${(b.recipients || []).length ? '<button class="btn btn-ghost" id="resend">שליחה חוזרת במייל</button>' : ''}</div>` : ''}
     <div class="card">
       <h2>נושאי התדריך</h2>
-      ${(b.topics || []).filter(k => TOPICS.he[k]).map(k => `<div class="topic"><h3>${TOPIC_ICONS[k]} ${esc(TOPICS.he[k].t)}</h3><ul>${TOPICS.he[k].b.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`).join('')}
+      ${briefingTopicList(b, 'he').map(tp => `<div class="topic"><h3>${tp.icon} ${esc(tp.t)}${tp.custom ? ' <span class="badge gray">מהספרייה</span>' : ''}</h3><ul>${tp.b.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`).join('')}
       ${b.notes ? `<h3>הערות</h3><div class="notes-box">${esc(b.notes)}</div>` : ''}
     </div>
     <div class="card">
@@ -485,6 +504,174 @@ function openSeqSign(b, onDone) {
   };
 }
 
+/* ---------- ספריית תדריכים אישית ---------- */
+function missingLangs(content) {
+  return LANG_CODES_TR.filter(l => !(content && content[l] && content[l].t && (content[l].b || []).length === (content.he.b || []).length));
+}
+async function gtx(text, tl) {
+  const r = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=he&tl=' + tl + '&dt=t&q=' + encodeURIComponent(text));
+  if (!r.ok) throw new Error('שירות התרגום החזיר ' + r.status);
+  const j = await r.json();
+  return (j[0] || []).map(x => x[0]).join('');
+}
+async function translateTopic(t, bullets, tl) {
+  const lines = [t, ...bullets];
+  let out = null;
+  const joined = lines.join('\n');
+  if (joined.length < 1500) {
+    try { out = (await gtx(joined, tl)).split('\n').map(x => x.trim()); } catch (_) { out = null; }
+  }
+  if (!out || out.length !== lines.length) {
+    out = [];
+    for (const l of lines) out.push((await gtx(l, tl)).trim());
+  }
+  return { t: out[0], b: out.slice(1) };
+}
+function parseLines(text) {
+  return String(text || '').split(/\r?\n/)
+    .map(l => l.replace(/^\s*(?:[•●○◦▪■\-–—*·]+|\d{1,2}[.)])\s*/, '').trim())
+    .filter(Boolean);
+}
+
+async function renderLibrary() {
+  loading();
+  const { data, error } = await sb.from('custom_topics').select('id,title,content,updated_at').order('title');
+  if (error) { app.innerHTML = `<div class="card alert bad">${esc(errMsg(error))}</div>`; return; }
+  app.innerHTML = `
+    <div class="row" style="margin-bottom:12px"><h1 class="grow" style="margin:0">📚 ספריית התדריכים שלי</h1>
+      <a class="btn" href="#/library/new">➕ תדריך חדש</a></div>
+    <p class="muted small">תדריכים שכתבת או העלית, עם תרגום לכל השפות. בוחרים אותם בעת יצירת תדריך יומי, לצד 6 הנושאים המובנים.</p>
+    ${(data || []).map(c => {
+      const miss = missingLangs(c.content);
+      return `<a class="list-item" href="#/library/${c.id}">
+        <div class="main"><div class="title">📄 ${esc(c.title)}</div>
+        <div class="small muted">${(c.content.he.b || []).length} סעיפים · עודכן ${fmtDateTime(c.updated_at).slice(0, 10)}</div></div>
+        ${miss.length ? `<span class="badge open">חסר תרגום: ${miss.length}</span>` : '<span class="badge closed">6 שפות</span>'}
+      </a>`;
+    }).join('') || '<div class="card center muted">הספרייה ריקה. לחצו "תדריך חדש" כדי לכתוב או להעלות תדריך.</div>'}`;
+}
+
+async function renderTopicEditor(id) {
+  loading();
+  let row = null;
+  if (id) {
+    const { data, error } = await sb.from('custom_topics').select('id,title,content').eq('id', id).single();
+    if (error) { app.innerHTML = `<div class="card alert bad">${esc(errMsg(error))}</div>`; return; }
+    row = data;
+  }
+  const content = row ? JSON.parse(JSON.stringify(row.content)) : { he: { t: '', b: [] } };
+  const trLangs = LANGS.filter(l => l.code !== 'he');
+  app.innerHTML = `
+    <div class="row" style="margin-bottom:10px"><a class="btn-link" href="#/library">→ חזרה לספרייה</a></div>
+    <h1>${row ? '✏️ עריכת תדריך' : '➕ תדריך חדש לספרייה'}</h1>
+    <div class="card">
+      <h2>1. התדריך בעברית</h2>
+      <label class="fld"><span>כותרת</span><input id="he-t" maxlength="200" value="${esc(content.he.t)}" placeholder="למשל: עבודה ליד בור חפירה"></label>
+      <label class="fld"><span>סעיפים — כל שורה היא סעיף</span>
+        <textarea id="he-b" style="min-height:170px" placeholder="אסור לעבוד ליד שפת הבור בלי מעקה&#10;ירידה לבור רק בסולם מאושר&#10;...">${esc((content.he.b || []).join('\n'))}</textarea></label>
+      <div class="row">
+        <label class="btn btn-ghost">📎 העלאת קובץ (Word / טקסט)<input type="file" id="upl" accept=".docx,.txt,.md,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden></label>
+        <span class="small muted">התוכן מהקובץ ייכנס לשדות למעלה — אפשר לערוך לפני התרגום</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="row"><h2 class="grow" style="margin:0">2. תרגום לשפות הפועלים</h2>
+        <button class="btn btn-navy" id="trb">🌐 תרגום אוטומטי לכל השפות</button></div>
+      <div class="alert warn small" id="stale" hidden style="margin-top:10px">העברית שונתה אחרי התרגום — מומלץ לתרגם מחדש.</div>
+      <p class="small muted">התרגום אוטומטי (Google Translate). אפשר לתקן כל שפה ידנית. מומלץ שדובר השפה יעבור על התרגום לפני שימוש.</p>
+      <div id="trs">${trLangs.map(l => `
+        <details class="card" style="margin:8px 0;padding:10px 12px" data-l="${l.code}">
+          <summary style="cursor:pointer;font-weight:700">${esc(l.name)} <span class="badge st"></span></summary>
+          <div dir="${l.dir}" style="margin-top:10px">
+            <label class="fld"><span>כותרת</span><input class="tr-t" value="${esc(content[l.code]?.t || '')}"></label>
+            <label class="fld"><span>סעיפים</span><textarea class="tr-b" style="min-height:130px">${esc((content[l.code]?.b || []).join('\n'))}</textarea></label>
+          </div>
+        </details>`).join('')}</div>
+    </div>
+    <div class="form-err" id="ee" hidden></div>
+    <div class="row sticky-actions">
+      <button class="btn btn-lg grow" id="sv">💾 שמירה בספרייה</button>
+      ${row ? '<button class="btn btn-danger btn-lg" id="dl">מחיקה</button>' : ''}
+    </div>`;
+
+  const he = () => ({ t: $('#he-t').value.trim(), b: parseLines($('#he-b').value) });
+  const readTr = l => { const d = $(`details[data-l="${l}"]`); return { t: $('.tr-t', d).value.trim(), b: parseLines($('.tr-b', d).value) }; };
+  const refreshStatus = () => {
+    const n = he().b.length;
+    trLangs.forEach(l => {
+      const tr = readTr(l.code), badge = $(`details[data-l="${l.code}"] .st`);
+      const ok = tr.t && tr.b.length && tr.b.length === n;
+      badge.className = 'badge st ' + (ok ? 'closed' : 'open');
+      badge.textContent = ok ? '✓ מתורגם' : (tr.t || tr.b.length ? 'מספר סעיפים לא תואם' : 'לא תורגם');
+    });
+  };
+  refreshStatus();
+  let translatedFrom = row ? JSON.stringify(content.he) : null;
+  const onHeChange = () => { $('#stale').hidden = !translatedFrom || translatedFrom === JSON.stringify(he()); refreshStatus(); };
+  $('#he-t').addEventListener('input', onHeChange); $('#he-b').addEventListener('input', onHeChange);
+  $$('.tr-t, .tr-b').forEach(el => el.addEventListener('input', refreshStatus));
+  const err = m => { $('#ee').textContent = m; $('#ee').hidden = !m; };
+
+  $('#upl').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      let text;
+      if (/\.docx$/i.test(f.name)) {
+        if (!window.mammoth) throw new Error('רכיב קריאת Word לא נטען');
+        text = (await window.mammoth.extractRawText({ arrayBuffer: await f.arrayBuffer() })).value;
+      } else text = await f.text();
+      const lines = parseLines(text);
+      if (!lines.length) throw new Error('הקובץ ריק');
+      if (!$('#he-t').value.trim()) { $('#he-t').value = lines.shift().slice(0, 200); }
+      $('#he-b').value = lines.join('\n');
+      onHeChange(); toast(`נטענו ${lines.length} סעיפים מהקובץ`);
+    } catch (x) { toast('לא הצלחתי לקרוא את הקובץ: ' + (x.message || x), true); }
+    e.target.value = '';
+  };
+
+  $('#trb').onclick = async () => {
+    const h = he();
+    if (h.t.length < 2 || !h.b.length) return err('כתבו כותרת ולפחות סעיף אחד בעברית');
+    err('');
+    const btn = $('#trb'); btn.disabled = true;
+    let done = 0, failed = [];
+    for (const l of trLangs) {
+      btn.textContent = `מתרגם… ${l.name} (${++done}/${trLangs.length})`;
+      try {
+        const tr = await translateTopic(h.t, h.b, l.code);
+        const d = $(`details[data-l="${l.code}"]`);
+        $('.tr-t', d).value = tr.t; $('.tr-b', d).value = tr.b.join('\n');
+      } catch (x) { failed.push(l.name); }
+    }
+    btn.disabled = false; btn.textContent = '🌐 תרגום אוטומטי לכל השפות';
+    translatedFrom = JSON.stringify(h); $('#stale').hidden = true; refreshStatus();
+    failed.length ? toast('התרגום נכשל ל: ' + failed.join(', ') + ' — נסו שוב או מלאו ידנית', true) : toast('התרגום הושלם — אפשר לפתוח כל שפה ולבדוק');
+  };
+
+  $('#sv').onclick = async () => {
+    const h = he();
+    if (h.t.length < 2) return err('חסרה כותרת');
+    if (!h.b.length) return err('חסר לפחות סעיף אחד');
+    const c = { he: h };
+    trLangs.forEach(l => { const tr = readTr(l.code); if (tr.t && tr.b.length) c[l.code] = tr; });
+    const miss = missingLangs(c);
+    if (miss.length && !confirm(`ב-${miss.length} שפות התרגום חסר או לא תואם למספר הסעיפים — פועלים בשפות אלה יראו את התדריך בעברית. לשמור בכל זאת?`)) return;
+    const btn = $('#sv'); btn.disabled = true;
+    const payload = { title: h.t, content: c, updated_at: new Date().toISOString() };
+    const res = row ? await sb.from('custom_topics').update(payload).eq('id', row.id)
+                    : await sb.from('custom_topics').insert(payload);
+    btn.disabled = false;
+    if (res.error) return err(errMsg(res.error));
+    toast('נשמר בספרייה'); location.hash = '#/library';
+  };
+  const dl = $('#dl');
+  if (dl) dl.onclick = async () => {
+    if (!confirm('למחוק את התדריך מהספרייה? תדריכים יומיים שכבר נוצרו איתו לא ישתנו.')) return;
+    const { error } = await sb.from('custom_topics').delete().eq('id', row.id);
+    error ? toast(errMsg(error), true) : (location.hash = '#/library');
+  };
+}
+
 /* ---------- PDF ---------- */
 function pdfName(b) {
   return `תדריך בטיחות - ${(b.sites?.name || '').replace(/[\\/:*?"<>|]/g, '')} - ${fmtDate(b.briefing_date)}.pdf`;
@@ -580,10 +767,10 @@ async function makePdf(b) {
   ], { header: false });
 
   heading('נושאי התדריך');
-  (b.topics || []).filter(k => TOPICS.he[k]).forEach(k => {
+  briefingTopicList(b, 'he').forEach(tp => {
     ensure(80);
-    para('• ' + TOPICS.he[k].t, { size: 25, bold: true, gap: 2 });
-    TOPICS.he[k].b.forEach(x => para('– ' + x, { size: 22, color: '#333', indent: 26, gap: 0 }));
+    para('• ' + tp.t, { size: 25, bold: true, gap: 2 });
+    tp.b.forEach(x => para('– ' + x, { size: 22, color: '#333', indent: 26, gap: 0 }));
     y += 10;
   });
   if (b.notes) { heading('הערות'); para(b.notes, { size: 23 }); }

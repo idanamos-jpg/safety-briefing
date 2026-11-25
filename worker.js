@@ -118,8 +118,7 @@ function showBriefing(r) {
     return bindFooter();
   }
   const b = r.briefing;
-  const topics = (b.topics || []).filter(k => TOPICS.he[k]);
-  const L = TOPICS[lang] || TOPICS.he;
+  const topicList = briefingTopicList(b, lang);
   const signedName = store.get('sb_signed_' + b.id);
 
   let action;
@@ -140,7 +139,7 @@ function showBriefing(r) {
     </div>
     <div class="card">
       <h2>${esc(t.topics)}</h2>
-      ${topics.map(k => `<div class="topic"><h3>${TOPIC_ICONS[k]} ${esc(L[k].t)}</h3><ul>${L[k].b.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`).join('')}
+      ${topicList.map(tp => `<div class="topic" ${tp.fallback ? 'dir="rtl"' : ''}><h3>${tp.icon} ${esc(tp.t)}</h3><ul>${tp.b.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`).join('')}
       ${b.notes ? `<h3 style="margin-top:14px">${esc(t.notes)}</h3><div class="small muted">${esc(t.notesOrig)}</div><div class="notes-box" dir="auto">${esc(b.notes)}</div>` : ''}
     </div>
     ${action}
