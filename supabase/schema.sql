@@ -163,6 +163,11 @@ grant select (id, owner_id, name, created_at) on public.sites to authenticated;
 grant update (name) on public.sites to authenticated;
 grant delete on public.sites to authenticated;
 revoke update, delete on public.signatures from authenticated;
+-- פרויקטים חדשים ב-Supabase לא נותנים הרשאות אוטומטיות לטבלאות חדשות — לכן הרשאות מפורשות (RLS עדיין מגביל לבעלים בלבד)
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.briefings     to authenticated;
+grant select, insert                 on public.signatures    to authenticated;
+grant select, insert, update, delete on public.custom_topics to authenticated;
 
 -- ---------- פונקציות למנהל ----------
 
