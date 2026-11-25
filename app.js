@@ -59,9 +59,11 @@ function route() {
   clearInterval(pollTimer);
   $('#topbar').hidden = !user;
   if (!user) return renderLogin();
-  const h = location.hash.replace(/^#/, '') || '/';
+  const full = location.hash.replace(/^#/, '') || '/';
+  const [h, qs] = full.split('?');
+  const q = new URLSearchParams(qs || '');
   if (h === '/' || h === '') return renderDashboard();
-  if (h === '/new') return renderNew();
+  if (h === '/new') return renderNew(q.get('site'), q.get('topic'));
   if (h === '/sites') return renderSites();
   if (h === '/library') return renderLibrary();
   if (h === '/library/new') return renderTopicEditor(null);
@@ -124,7 +126,7 @@ async function renderDashboard() {
   const rows = data || [];
   app.innerHTML = `
     <div class="row" style="margin-bottom:12px"><h1 class="grow" style="margin:0">תדריכים</h1>
-      <a class="btn" href="#/new">➕ תדריך חדש</a></div>
+      <a class="btn" href="#/new">➕ תדריך יומי לאתר</a></div>
     <div class="card">
       <div class="row">
         <input class="grow" id="q" placeholder="🔍 חיפוש לפי אתר / מנהל עבודה">
@@ -144,7 +146,7 @@ async function renderDashboard() {
           <div class="small muted">${fmtDate(r.briefing_date)} · ${fmtTime(r.briefing_time)} · ${esc(r.foreman_name)} · ${r.signatures?.[0]?.count ?? 0} חותמים</div></div>
         <span class="badge ${r.status}">${r.status === 'open' ? 'פתוח' : 'סגור'}</span>
       </a>`).join('')
-      : `<div class="card center muted">${rows.length ? 'אין תוצאות לחיפוש' : 'עדיין אין תדריכים. לחצו "תדריך חדש" כדי להתחיל.'}</div>`;
+      : `<div class="card center muted">${rows.length ? 'אין תוצאות לחיפוש' : 'עדיין אין תדריכים. פועלים שסורקים את ה-QR של אתר רואים רק <b>תדריך יומי שנוצר לאותו אתר להיום</b> — לחצו "תדריך יומי לאתר".'}</div>`;
   };
   ['q', 'qd', 'qs'].forEach(id => $('#' + id).addEventListener('input', draw));
   draw();
@@ -161,9 +163,18 @@ function siteUrl(id) { return new URL('w.html?s=' + id, location.href).href; }
 async function renderSites() {
   loading();
   let sites;
-  try { sites = await loadSites(); } catch (e) { app.innerHTML = `<div class="card alert bad">${esc(errMsg(e))}</div>`; return; }
+  let todays = [], counts = {};
+  try {
+    sites = await loadSites();
+    const { data, error } = await sb.from('briefings').select('id,site_id,briefing_date,status,signatures(count)');
+    if (error) throw error;
+    (data || []).forEach(b => { counts[b.site_id] = (counts[b.site_id] || 0) + 1; if (b.briefing_date === todayIL()) todays.push(b); });
+  } catch (e) { app.innerHTML = `<div class="card alert bad">${esc(errMsg(e))}</div>`; return; }
+  const todayOf = id => todays.filter(b => b.site_id === id).sort((a, b) => (a.status === 'open' ? -1 : 1))[0];
+  const dupNames = sites.map(x => x.name).filter((n, i, a) => a.indexOf(n) !== i);
   app.innerHTML = `
     <h1>🏗️ אתרים</h1>
+    ${dupNames.length ? `<div class="alert warn">יש כמה אתרים באותו שם (${esc([...new Set(dupNames)].join(', '))}). לכל אתר QR שונה — מחקו את הכפולים שאין בהם תדריכים כדי לא להתבלבל.</div>` : ''}
     <form class="card" id="nf"><h2>אתר חדש</h2>
       <div class="grid2">
         <label class="fld"><span>שם האתר</span><input id="sn" required placeholder="למשל: מגדל רוטשילד 22"></label>
@@ -172,13 +183,30 @@ async function renderSites() {
       <button class="btn">יצירת אתר</button>
       <p class="small muted" style="margin-bottom:0">לכל אתר QR קבוע אחד. הסיסמה נשמרת מוצפנת ונבדקת בשרת.</p>
     </form>
-    <div>${sites.map(s => `
-      <div class="list-item" style="cursor:default">
-        <div class="main"><div class="title">${esc(s.name)}</div></div>
-        <button class="btn btn-navy" data-qr="${s.id}">QR</button>
-        <button class="btn btn-ghost" data-pw="${s.id}">🔑</button>
-        <button class="btn btn-ghost" data-rn="${s.id}">✏️</button>
-      </div>`).join('') || '<div class="card center muted">עוד אין אתרים</div>'}</div>`;
+    <div>${sites.map(s => {
+      const tb = todayOf(s.id);
+      const status = tb
+        ? `<a class="badge ${tb.status}" href="#/b/${tb.id}">תדריך היום: ${tb.status === 'open' ? 'פתוח' : 'סגור'} · ${tb.signatures?.[0]?.count ?? 0} חותמים</a>`
+        : '<span class="badge gray">אין תדריך להיום — הפועלים לא יראו כלום בסריקה</span>';
+      return `
+      <div class="card" style="padding:12px">
+        <div class="row"><div class="grow"><div style="font-weight:700">${esc(s.name)}</div><div class="small muted">נוצר ${fmtDateTime(s.created_at).slice(0, 16)}</div></div></div>
+        <div style="margin:8px 0">${status}</div>
+        <div class="row">
+          ${tb ? `<a class="btn" href="#/b/${tb.id}">פתיחת תדריך היום</a>` : `<a class="btn" href="#/new?site=${s.id}">➕ תדריך להיום</a>`}
+          <button class="btn btn-navy" data-qr="${s.id}">QR</button>
+          <button class="btn btn-ghost" data-pw="${s.id}" title="שינוי סיסמה">🔑</button>
+          <button class="btn btn-ghost" data-rn="${s.id}" title="שינוי שם">✏️</button>
+          ${counts[s.id] ? '' : `<button class="btn btn-danger" data-del="${s.id}" title="מחיקת אתר">🗑️</button>`}
+        </div>
+      </div>`;
+    }).join('') || '<div class="card center muted">עוד אין אתרים</div>'}</div>`;
+  $$('[data-del]').forEach(b => b.onclick = async () => {
+    const st = sites.find(x => x.id === b.dataset.del);
+    if (!confirm(`למחוק את האתר "${st.name}"? ה-QR שלו יפסיק לעבוד.`)) return;
+    const { error } = await sb.from('sites').delete().eq('id', st.id);
+    error ? toast(errMsg(error), true) : (toast('האתר נמחק'), renderSites());
+  });
   $('#nf').onsubmit = async e => {
     e.preventDefault();
     const { error } = await sb.rpc('create_site', { p_name: $('#sn').value.trim(), p_password: $('#sp').value });
@@ -230,7 +258,7 @@ const TOPIC_POSTER = {
 };
 
 /* ---------- תדריך חדש ---------- */
-async function renderNew() {
+async function renderNew(preSite = null, preTopic = null) {
   loading();
   let sites;
   let library = [];
@@ -243,9 +271,11 @@ async function renderNew() {
   try { lastTopics = JSON.parse(localStorage.getItem('sb_last_topics') || 'null'); lastCustom = JSON.parse(localStorage.getItem('sb_last_custom') || '[]'); } catch (_) {}
   const lastRecipients = localStorage.getItem('sb_last_recipients') || '';
   const lastForeman = localStorage.getItem('sb_last_foreman') || '';
-  const lastSite = localStorage.getItem('sb_last_site_sel') || '';
+  const lastSite = preSite || localStorage.getItem('sb_last_site_sel') || '';
+  if (preTopic) { lastTopics = []; lastCustom = [preTopic]; }
   app.innerHTML = `
-    <h1>➕ תדריך חדש</h1>
+    <h1>➕ תדריך יומי לאתר</h1>
+    <p class="muted small">הפועלים שסורקים את ה-QR של האתר יראו את התדריך הזה בתאריך שנבחר, ויחתמו עליו.</p>
     <form class="card" id="bf">
       <label class="fld"><span>אתר</span>
         <select id="site" required>
@@ -265,15 +295,15 @@ async function renderNew() {
       <div class="fld"><span>נושאי בטיחות</span>
         <div class="topic-pick">${TOPIC_KEYS.map(k => `<label><input type="checkbox" name="tp" value="${k}" ${!lastTopics || lastTopics.includes(k) ? 'checked' : ''}> ${TOPIC_ICONS[k]} ${esc(TOPICS.he[k].t)}</label>`).join('')}</div>
       </div>
-      <div class="fld"><span>📚 תדריכים מהספרייה שלי</span>
-        ${library.length ? `<div class="topic-pick">${library.map(c => `<label><input type="checkbox" name="ct" value="${c.id}" ${lastCustom.includes(c.id) ? 'checked' : ''}> 📄 ${esc(c.title)}${missingLangs(c.content).length ? ' <span class="badge open">חסר תרגום</span>' : ''}</label>`).join('')}</div>` : '<div class="small muted">עוד אין תדריכים בספרייה.</div>'}
-        <a class="btn-link small" href="#/library/new">➕ הוספת תדריך חדש לספרייה</a>
+      <div class="fld"><span>📚 תכני תדריך מהספרייה שלי</span>
+        ${library.length ? `<div class="topic-pick">${library.map(c => `<label><input type="checkbox" name="ct" value="${c.id}" ${lastCustom.includes(c.id) ? 'checked' : ''}> 📄 ${esc(c.title)}${missingLangs(c.content).length ? ' <span class="badge open">חסר תרגום</span>' : ''}</label>`).join('')}</div>` : '<div class="small muted">עוד אין תכנים בספרייה.</div>'}
+        <a class="btn-link small" href="#/library/new">➕ כתיבה / העלאה של תוכן חדש לספרייה</a>
       </div>
       <label class="fld"><span>הערות חופשיות (אופציונלי)</span><textarea id="nt" placeholder="לא מתורגמות — יוצגו לפועלים כפי שנכתבו"></textarea></label>
       <label class="fld"><span>נמעני ה-PDF בסגירה</span><textarea id="rc" dir="ltr" placeholder="safety@company.co.il, pm@company.co.il" style="min-height:60px">${esc(lastRecipients)}</textarea>
         <div class="small muted">מופרדים בפסיק או בשורה חדשה</div></label>
       <div class="form-err" id="be" hidden></div>
-      <button class="btn btn-block btn-lg" id="bs">יצירת תדריך</button>
+      <button class="btn btn-block btn-lg" id="bs">יצירת התדריך והפעלתו לפועלים</button>
     </form>`;
   const sel = $('#site');
   const syncNew = () => { $('#newsite').hidden = sel.value !== '__new'; };
@@ -538,17 +568,21 @@ async function renderLibrary() {
   const { data, error } = await sb.from('custom_topics').select('id,title,content,updated_at').order('title');
   if (error) { app.innerHTML = `<div class="card alert bad">${esc(errMsg(error))}</div>`; return; }
   app.innerHTML = `
-    <div class="row" style="margin-bottom:12px"><h1 class="grow" style="margin:0">📚 ספריית התדריכים שלי</h1>
-      <a class="btn" href="#/library/new">➕ תדריך חדש</a></div>
+    <div class="row" style="margin-bottom:12px"><h1 class="grow" style="margin:0">📚 תכני תדריך — הספרייה שלי</h1>
+      <a class="btn" href="#/library/new">➕ תוכן חדש</a></div>
     <p class="muted small">תדריכים שכתבת או העלית, עם תרגום לכל השפות. בוחרים אותם בעת יצירת תדריך יומי, לצד 6 הנושאים המובנים.</p>
     ${(data || []).map(c => {
       const miss = missingLangs(c.content);
-      return `<a class="list-item" href="#/library/${c.id}">
-        <div class="main"><div class="title">📄 ${esc(c.title)}</div>
-        <div class="small muted">${(c.content.he.b || []).length} סעיפים · עודכן ${fmtDateTime(c.updated_at).slice(0, 10)}</div></div>
-        ${miss.length ? `<span class="badge open">חסר תרגום: ${miss.length}</span>` : '<span class="badge closed">6 שפות</span>'}
-      </a>`;
-    }).join('') || '<div class="card center muted">הספרייה ריקה. לחצו "תדריך חדש" כדי לכתוב או להעלות תדריך.</div>'}`;
+      return `<div class="card" style="padding:12px">
+        <div class="row"><div class="grow"><div style="font-weight:700">📄 ${esc(c.title)}</div>
+          <div class="small muted">${(c.content.he.b || []).length} סעיפים · עודכן ${fmtDateTime(c.updated_at).slice(0, 10)}</div></div>
+          ${miss.length ? `<span class="badge open">חסר תרגום: ${miss.length}</span>` : '<span class="badge closed">6 שפות</span>'}</div>
+        <div class="row" style="margin-top:8px">
+          <a class="btn" href="#/new?topic=${c.id}">📤 שליחה לאתר כתדריך יומי</a>
+          <a class="btn btn-ghost" href="#/library/${c.id}">✏️ עריכה</a>
+        </div></div>`;
+    }).join('') || '<div class="card center muted">הספרייה ריקה. לחצו "תוכן חדש" כדי לכתוב או להעלות תדריך.</div>'}
+    <p class="small muted">תוכן בספרייה לא מוצג לפועלים לבד — לוחצים "שליחה לאתר" כדי ליצור ממנו תדריך יומי לאתר.</p>`;
 }
 
 async function renderTopicEditor(id) {
@@ -563,7 +597,7 @@ async function renderTopicEditor(id) {
   const trLangs = LANGS.filter(l => l.code !== 'he');
   app.innerHTML = `
     <div class="row" style="margin-bottom:10px"><a class="btn-link" href="#/library">→ חזרה לספרייה</a></div>
-    <h1>${row ? '✏️ עריכת תדריך' : '➕ תדריך חדש לספרייה'}</h1>
+    <h1>${row ? '✏️ עריכת תוכן תדריך' : '➕ תוכן תדריך חדש לספרייה'}</h1>
     <div class="card">
       <h2>1. התדריך בעברית</h2>
       <label class="fld"><span>כותרת</span><input id="he-t" maxlength="200" value="${esc(content.he.t)}" placeholder="למשל: עבודה ליד בור חפירה"></label>
@@ -654,15 +688,28 @@ async function renderTopicEditor(id) {
     if (!h.b.length) return err('חסר לפחות סעיף אחד');
     const c = { he: h };
     trLangs.forEach(l => { const tr = readTr(l.code); if (tr.t && tr.b.length) c[l.code] = tr; });
+    const stale = translatedFrom && translatedFrom !== JSON.stringify(h);
+    if (missingLangs(c).length || stale) {
+      // תרגום אוטומטי לפני שמירה לשפות שחסרות (או כשהעברית השתנתה)
+      const btn = $('#sv'); btn.disabled = true;
+      for (const l of trLangs) {
+        if (!stale && !missingLangs(c).includes(l.code)) continue;
+        btn.textContent = 'מתרגם… ' + l.name;
+        try { c[l.code] = await translateTopic(h.t, h.b, l.code); } catch (_) {}
+      }
+      btn.disabled = false; btn.textContent = '💾 שמירה בספרייה';
+    }
     const miss = missingLangs(c);
     if (miss.length && !confirm(`ב-${miss.length} שפות התרגום חסר או לא תואם למספר הסעיפים — פועלים בשפות אלה יראו את התדריך בעברית. לשמור בכל זאת?`)) return;
     const btn = $('#sv'); btn.disabled = true;
     const payload = { title: h.t, content: c, updated_at: new Date().toISOString() };
-    const res = row ? await sb.from('custom_topics').update(payload).eq('id', row.id)
-                    : await sb.from('custom_topics').insert(payload);
+    const res = row ? await sb.from('custom_topics').update(payload).eq('id', row.id).select('id').single()
+                    : await sb.from('custom_topics').insert(payload).select('id').single();
     btn.disabled = false;
     if (res.error) return err(errMsg(res.error));
-    toast('נשמר בספרייה'); location.hash = '#/library';
+    toast('נשמר בספרייה');
+    location.hash = confirm('נשמר. ליצור ממנו עכשיו תדריך יומי לאתר, כדי שהפועלים יראו אותו בסריקת ה-QR?')
+      ? '#/new?topic=' + res.data.id : '#/library';
   };
   const dl = $('#dl');
   if (dl) dl.onclick = async () => {

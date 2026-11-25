@@ -132,7 +132,9 @@ drop policy if exists sites_update on public.sites;
 drop policy if exists sites_delete on public.sites;
 create policy sites_select on public.sites for select to authenticated using (owner_id = auth.uid());
 create policy sites_update on public.sites for update to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());
-create policy sites_delete on public.sites for delete to authenticated using (owner_id = auth.uid());
+-- מחיקת אתר רק אם אין בו תדריכים (מחיקה הייתה מוחקת גם חתימות חתומות)
+create policy sites_delete on public.sites for delete to authenticated
+  using (owner_id = auth.uid() and not exists (select 1 from public.briefings b where b.site_id = sites.id));
 
 drop policy if exists briefings_select on public.briefings;
 drop policy if exists briefings_insert on public.briefings;
