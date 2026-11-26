@@ -257,6 +257,7 @@ const TOPIC_POSTER = {
   ro: 'Scanați, introduceți parola șantierului și semnați instructajul de astăzi',
   hi: 'स्कैन करें, साइट पासवर्ड डालें और आज की ब्रीफ़िंग पर हस्ताक्षर करें',
   si: 'ස්කෑන් කර, වැඩබිම් මුරපදය ඇතුළත් කර අද උපදෙස්වලට අත්සන් කරන්න',
+  zh: '扫描二维码，输入工地密码，签署今日安全交底',
 };
 
 /* ---------- תדריך חדש ---------- */
@@ -541,7 +542,7 @@ function missingLangs(content) {
   return LANG_CODES_TR.filter(l => !(content && content[l] && content[l].t && (content[l].b || []).length === (content.he.b || []).length));
 }
 async function gtx(text, tl) {
-  const r = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=he&tl=' + tl + '&dt=t&q=' + encodeURIComponent(text));
+  const r = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=he&tl=' + (GTX_CODE[tl] || tl) + '&dt=t&q=' + encodeURIComponent(text));
   if (!r.ok) throw new Error('שירות התרגום החזיר ' + r.status);
   const j = await r.json();
   return (j[0] || []).map(x => x[0]).join('');
@@ -578,7 +579,7 @@ async function renderLibrary() {
       return `<div class="card" style="padding:12px">
         <div class="row"><div class="grow"><div style="font-weight:700">📄 ${esc(c.title)}</div>
           <div class="small muted">${(c.content.he.b || []).length} סעיפים · עודכן ${fmtDateTime(c.updated_at).slice(0, 10)}</div></div>
-          ${miss.length ? `<span class="badge open">חסר תרגום: ${miss.length}</span>` : '<span class="badge closed">6 שפות</span>'}</div>
+          ${miss.length ? `<span class="badge open">חסר תרגום: ${miss.length}</span>` : '<span class="badge closed">7 שפות</span>'}</div>
         <div class="row" style="margin-top:8px">
           <a class="btn" href="#/new?topic=${c.id}">📤 שליחה לאתר כתדריך יומי</a>
           <a class="btn btn-ghost" href="#/library/${c.id}">✏️ עריכה</a>
@@ -739,7 +740,7 @@ async function makePdf(b) {
 
   // A4 ב-150dpi; הטקסט מצויר במנוע הטקסט של הדפדפן (תומך עברית/ערבית מלא)
   const W = 1240, H = 1754, M = 80, R = W - M, CW = W - 2 * M;
-  const FONT = 'Arial, "Noto Sans Hebrew", "Noto Sans Arabic", "Segoe UI", sans-serif';
+  const FONT = 'Arial, "Noto Sans Hebrew", "Noto Sans Arabic", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", "Segoe UI", sans-serif';
   const holder = document.createElement('div'); holder.style.cssText = 'position:fixed;left:-99999px;top:0;width:1px;height:1px;overflow:hidden';
   holder.setAttribute('dir', 'rtl'); document.body.appendChild(holder);
   const pages = []; let ctx, y;

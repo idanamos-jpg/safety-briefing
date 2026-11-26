@@ -5,7 +5,7 @@
   --warn:#b54708; --warn-bg:#fff4e5; --bad:#c62828; --bad-bg:#fdecea; --r:14px;
 }
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI",Arial,"Noto Sans","Noto Sans Arabic","Noto Sans Devanagari","Noto Sans Sinhala",sans-serif;font-size:16px;line-height:1.5}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI",Arial,"Noto Sans","Noto Sans Arabic","Noto Sans Devanagari","Noto Sans Sinhala","Microsoft YaHei","PingFang SC","Noto Sans SC",sans-serif;font-size:16px;line-height:1.5}
 button,input,select,textarea{font:inherit;color:inherit}
 a{color:var(--navy)}
 main{max-width:860px;margin:0 auto;padding:16px 14px 80px}

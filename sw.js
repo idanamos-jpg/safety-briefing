@@ -1,5 +1,5 @@
 // Service worker מינימלי: מאפשר התקנה למסך הבית; תמיד מנסה רשת קודם (הנתונים תמיד עדכניים)
-const C = 'sb-shell-v3';
+const C = 'sb-shell-v4';
 const SHELL = ['index.html', 'app.js', 'manifest-admin.webmanifest', 'w.html', 'worker.js', 'shared.js', 'styles.css', 'config.js', 'icon-192.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(C).then(c => c.addAll(SHELL)).catch(() => {})); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k))))); self.clients.claim(); });
