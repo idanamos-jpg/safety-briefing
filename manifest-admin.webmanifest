@@ -1,0 +1,19 @@
+{
+  "id": "./?app=admin",
+  "name": "תדריך בטיחות — ניהול",
+  "short_name": "תדריך בטיחות",
+  "description": "ניהול תדריכי בטיחות יומיים וחתימות פועלים",
+  "start_url": "./index.html?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "dir": "rtl",
+  "lang": "he",
+  "background_color": "#f5f6f8",
+  "theme_color": "#0b2545",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

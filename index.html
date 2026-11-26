@@ -5,15 +5,18 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b2545">
 <title>תדריך בטיחות באתר — ניהול</title>
+<link rel="manifest" href="manifest-admin.webmanifest">
 <link rel="icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="תדריך בטיחות">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="styles.css?v=202611251746">
-<script src="config.js?v=202611251746"></script>
+<link rel="stylesheet" href="styles.css?v=202611260730">
+<script src="config.js?v=202611260730"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js" defer></script>
-<script src="shared.js?v=202611251746"></script>
+<script src="shared.js?v=202611260730"></script>
 </head>
 <body>
 <header class="topbar" id="topbar" hidden>
@@ -22,10 +25,11 @@
   <button class="tb-btn" onclick="location.hash='#/'">📋 תדריכים</button>
   <button class="tb-btn" onclick="location.hash='#/library'">📚 תכנים</button>
   <button class="tb-btn" onclick="location.hash='#/sites'">🏗️ אתרים</button>
+  <button class="tb-btn" id="install-btn" hidden>📲 התקנה</button>
   <button class="tb-btn" id="logout">יציאה</button>
 </header>
 <main id="app"><div class="spinner"></div></main>
 <div id="print-area"></div>
-<script src="app.js?v=202611251746"></script>
+<script src="app.js?v=202611260730"></script>
 </body>
 </html>

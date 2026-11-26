@@ -91,9 +91,11 @@ function renderLogin(mode = 'login', msg = '') {
         <button type="button" class="btn-link" id="sw">${signup ? 'כבר רשום? כניסה' : 'משתמש חדש? הרשמה'}</button>
         ${signup ? '' : ' · <button type="button" class="btn-link" id="fg">שכחתי סיסמה</button>'}
       </p>
+      ${isStandalone() ? '' : '<p class="center" style="margin:10px 0 0"><button type="button" class="btn btn-ghost" id="inst2">📲 התקנת האפליקציה בטלפון</button></p>'}
     </form>
   </div>`;
   $('#sw').onclick = () => renderLogin(signup ? 'login' : 'signup');
+  const i2 = $('#inst2'); if (i2) i2.onclick = doInstall;
   $('#gg').onclick = async () => {
     const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
     if (error) renderLogin(mode, 'כניסה עם Google לא הוגדרה עדיין: ' + error.message);
@@ -878,5 +880,26 @@ async function sendEmail(b) {
     // הפונקציה מעדכנת בעצמה sent/failed
   } catch (_) { return setEmailStatus(b.id, 'not_configured'); }
 }
+
+/* ---------- התקנה כאפליקציה בטלפון ---------- */
+let installEvt = null;
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; refreshInstallBtn(); });
+window.addEventListener('appinstalled', () => { installEvt = null; refreshInstallBtn(); toast('האפליקציה הותקנה ✓'); });
+function refreshInstallBtn() {
+  const b = $('#install-btn'); if (!b) return;
+  b.hidden = isStandalone() || !(installEvt || isIOS() || /android/i.test(navigator.userAgent));
+}
+async function doInstall() {
+  if (installEvt) { installEvt.prompt(); await installEvt.userChoice; installEvt = null; refreshInstallBtn(); return; }
+  modal('📲 התקנה בטלפון', isIOS()
+    ? `<ol style="line-height:2"><li>פותחים את הקישור ב-<b>Safari</b></li><li>לוחצים על כפתור השיתוף ⬆️ בתחתית המסך</li><li>בוחרים <b>"הוספה למסך הבית"</b> ← <b>הוספה</b></li></ol>`
+    : `<ol style="line-height:2"><li>פותחים את הקישור ב-<b>Chrome</b></li><li>לוחצים על התפריט ⋮ למעלה</li><li>בוחרים <b>"התקנת האפליקציה"</b> (או "הוספה למסך הבית") ← <b>התקנה</b></li></ol>
+       <p class="small muted">בדפדפן Samsung Internet: תפריט ☰ ← "הוספת דף אל" ← "מסך הבית".</p>`);
+}
+$('#install-btn').onclick = doInstall;
+refreshInstallBtn();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 init();
